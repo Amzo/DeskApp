@@ -1,0 +1,154 @@
+import os
+
+import numpy as np
+import cv2
+from PyQt5 import QtGui
+from PyQt5.QtCore import QDir, Qt, QUrl, QStandardPaths, QDate, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QPixmap, QGuiApplication, QDesktopServices, QImage, QIcon
+from PyQt5.QtMultimedia import QCameraInfo
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QMainWindow, QAction, QToolBar, \
+    QComboBox, QDesktopWidget
+
+from Lib import EyeMesh, PoseDetection
+
+
+class VideoThread(QThread):
+    change_pixmap_signal = pyqtSignal(np.ndarray)
+
+    def __init__(self):
+        super().__init__()
+        self._run_flag = True
+        self.eyeMesh = EyeMesh.EyeMesh()
+        self.pose = PoseDetection.PoseDetection()
+        self.blockMesh = True
+        self.blockPose = True
+
+    def run(self):
+        # capture from web cam
+        cap = cv2.VideoCapture(0)
+        eyeTracker = EyeMesh.EyeMesh()
+        while self._run_flag:
+            ret, cv_img = cap.read()
+            if ret:
+                """I don't know how powerful the hardware will be, so limiting eye mesh tracking"""
+                if not self.blockMesh:
+                    if not self.blockPose:
+                        qt_img = self.pose.return_pose_Image(cv_img)
+                    else:
+                        qt_img = self.eyeMesh.return_Iris_Image(cv_img)
+                try:
+                    if qt_img is None:
+                        self.change_pixmap_signal.emit(cv_img)
+                    else:
+                        self.change_pixmap_signal.emit(qt_img)
+                except UnboundLocalError:
+                    self.change_pixmap_signal.emit(cv_img)
+
+        # shut down capture system
+        cap.release()
+
+    def stop(self):
+        """Sets run flag to False and waits for thread to finish"""
+        self._run_flag = False
+        self.wait()
+
+
+class CameraWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super(CameraWindow, self).__init__(parent)
+        self.display_width = QDesktopWidget().screenGeometry().width()
+        self.display_height = QDesktopWidget().screenGeometry().height()
+
+        # create the label that holds the image
+        self.image_label = QLabel(self)
+        self.image_label.resize(self.display_width, self.display_height)
+        self.image_label.setGeometry(0, 0, self.display_width, self.display_height)
+        # create a vertical box layout and add the two labels
+        vbox = QHBoxLayout()
+        vbox.addWidget(self.image_label)
+        # set the vbox layout as the widgets layout
+
+        self.EyeTrackButton = QPushButton("Enable Eye Tracking", self)
+        self.EyeTrackButton.setGeometry(self.display_width, 0, 150, 40)
+        self.EyeTrackButton.setCheckable(True)
+        self.EyeTrackButton.clicked.connect(self.toggleEyeMesh)
+        vbox.addWidget(self.EyeTrackButton)
+
+        self.PoseButton = QPushButton("Enable Pose Detection", self)
+        self.PoseButton.setGeometry(self.display_width, 50, 150, 40)
+        self.PoseButton.setCheckable(True)
+        self.PoseButton.clicked.connect(self.togglePose)
+        vbox.addWidget(self.PoseButton)
+
+        self.combobox = QComboBox(self)
+
+        for i in range(0, 24):
+            self.combobox.addItem(str(i))
+
+        self.combobox.currentTextChanged.connect(self.update_mesh_intervals)
+        self.combobox.setCurrentIndex(4)
+        self.combobox.setGeometry(self.display_width, 100, 150, 40)
+        vbox.addWidget(self.combobox)
+        # create the video capture thread
+        self.thread = VideoThread()
+        # connect its signal to the update_image slot
+        self.thread.change_pixmap_signal.connect(self.update_image)
+        # start the thread
+        self.thread.start()
+        self.setLayout(vbox)
+
+    def update_mesh_intervals(self, value):
+        try:
+            self.thread.eyeMesh.how_many_frames = int(value)
+            self.thread.pose.how_many_frames = int(value)
+        except AttributeError:
+            pass
+
+    def resizeEvent(self, event):
+        self.EyeTrackButton.move(self.width() - self.EyeTrackButton.width() - 2, 0)
+        self.PoseButton.move(self.width() - self.EyeTrackButton.width() - 2, 50)
+        self.combobox.move(self.width() - self.EyeTrackButton.width() - 2, 100)
+        self.display_width = self.width() - self.EyeTrackButton.width() - 17
+        #self.display_height = self.height()
+        # self.image_label.move(0,0)
+        super(CameraWindow, self).resizeEvent(event)
+
+    def closeEvent(self, event):
+        self.thread.stop()
+        event.accept()
+
+    def toggleEyeMesh(self):
+        if self.EyeTrackButton.isChecked():
+            self.EyeTrackButton.setStyleSheet("background-color : lightblue")
+        else:
+            self.EyeTrackButton.setStyleSheet("background-color : lightgrey")
+
+        self.thread.blockMesh = not self.thread.blockMesh
+
+    def togglePose(self):
+        if self.EyeTrackButton.isChecked():
+            self.EyeTrackButton.setStyleSheet("background-color : lightblue")
+        else:
+            self.EyeTrackButton.setStyleSheet("background-color : lightgrey")
+
+        self.thread.blockPose = not self.thread.blockPose
+
+    @pyqtSlot(np.ndarray)
+    def update_image(self, cv_img):
+        """Updates the image_label with a new opencv image"""
+        if not self.signalsBlocked():
+            self.thread.blockSignals(False)
+            qt_img = self.convert_cv_qt(cv_img)
+            self.image_label.setPixmap(qt_img)
+        else:
+            print("signals blocked Camera")
+            self.thread.blockSignals(True)
+
+    def convert_cv_qt(self, cv_img):
+        """Convert from an opencv image to QPixmap"""
+        rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
+        p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.IgnoreAspectRatio)
+        return QPixmap.fromImage(p)
