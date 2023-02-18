@@ -1,31 +1,33 @@
+import time
+
 import mediapipe as mp
 import numpy as np
+from PyQt5.QtCore import QThread, pyqtSignal
 
 
-class PoseDetection:
+class PoseDetection(QThread):
+    toggle_pixmap_signal = pyqtSignal(int)
+
     def __init__(self):
-        self.how_many_frames = 4
+        super().__init__()
+        self.how_many_frames = 2
         self.frame_count = 0
-        self.mp_drawing = mp.solutions.drawing_utils
+        self.image = None
+        self.enabled = False
+        self.results = None
 
-    def return_pose_Image(self, image):
-        self.frame_count += 1
-        if self.frame_count >= self.how_many_frames:
-            pose_mesh = mp.solutions.pose.Pose(min_detection_confidence=0.6, min_tracking_confidence=0.6)
+        self.pose_mesh = mp.solutions.pose.Pose(min_detection_confidence=0.6, min_tracking_confidence=0.6)
 
-            results = pose_mesh.process(image[:, :, ::-1])
-            img_h, img_w = image.shape[:2]
+    def run(self):
+        while True:
+            time.sleep(0.04)
+            if self.frame_count >= self.how_many_frames and self.image is not None:
 
-            if results.pose_landmarks is not None:
-                self.mp_drawing.draw_landmarks(image=image, landmark_list=results.pose_landmarks,
-                                          connections=mp.solutions.pose.POSE_CONNECTIONS,
-                                          landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255),
-                                                                                       thickness=3, circle_radius=3),
-                                          connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(49, 125, 237),
-                                                                                         thickness=2, circle_radius=2))
+                self.results = self.pose_mesh.process(self.image[:, :, ::-1])
 
                 self.frame_count = 0
-                return image
+                self.toggle_pixmap_signal.emit(1)
             else:
-                return image
+                self.toggle_pixmap_signal.emit(1)
+
 

@@ -9,6 +9,7 @@ from PyQt5.QtMultimedia import QCameraInfo
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QMainWindow, QAction, QToolBar, \
     QComboBox, QDesktopWidget
 
+import mediapipe as mp
 from Lib import EyeMesh, PoseDetection
 
 
@@ -48,6 +49,7 @@ class CameraWindow(QMainWindow):
         super(CameraWindow, self).__init__(parent)
         self.tick = None
         self.eyeMesh = False
+        self.mp_drawing = mp.solutions.drawing_utils
         self.display_width = QDesktopWidget().screenGeometry().width()
         self.display_height = QDesktopWidget().screenGeometry().height()
 
@@ -98,7 +100,11 @@ class CameraWindow(QMainWindow):
         self.eyeTrackThread = EyeMesh.EyeMesh()
         self.eyeTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
         self.eyeTrackThread.start()
-        
+
+
+        self.poseTrackThread = PoseDetection.PoseDetection()
+        self.poseTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
+        self.poseTrackThread.start()
         self.eyePos = EyeMesh.EyePosition()
         #self.eyePos.correct_position.connect(self.add_tick)
         #self.eyePos.start()
@@ -147,7 +153,8 @@ class CameraWindow(QMainWindow):
         else:
             self.PoseButton.setStyleSheet("background-color : lightgrey")
 
-        self.thread.blockPose = not self.thread.blockPose
+        self.poseTrackThread.enabled = not self.poseTrackThread.enabled
+
 
     @pyqtSlot(np.ndarray)
     def update_image(self, cv_img):
@@ -175,6 +182,23 @@ class CameraWindow(QMainWindow):
                 cv2.putText(img=cv_img, text='OK', org=(480 - 30, 640 - 30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3,
                             color=(52, 235, 52), thickness=3)
 
+        # if pose detection is enabled
+        if self.poseTrackThread.enabled:
+            self.poseTrackThread.frame_count += 1
+
+            if self.poseTrackThread.frame_count >= 2:
+                self.videoThread.blockSignals(True)
+                self.poseTrackThread.image = cv_img
+
+            if self.poseTrackThread.results is not None:
+                    self.mp_drawing.draw_landmarks(image=cv_img, landmark_list=self.poseTrackThread.results.pose_landmarks,
+                                                   connections=mp.solutions.pose.POSE_CONNECTIONS,
+                                                   landmark_drawing_spec=self.mp_drawing.DrawingSpec(
+                                                       color=(255, 255, 255),
+                                                       thickness=3, circle_radius=3),
+                                                   connection_drawing_spec=self.mp_drawing.DrawingSpec(
+                                                       color=(49, 125, 237),
+                                                       thickness=2, circle_radius=2))
 
         qt_img = self.convert_cv_qt(cv_img)
         self.image_label.setPixmap(qt_img)
