@@ -41,7 +41,7 @@ class App(QMainWindow):
             self.tab_widget.camera.blockSignals(True)
         if i == 1:
             self.tab_widget.camera.blockSignals(False)
-            self.tab_widget.camera.thread.blockSignals(False)
+            #self.tab_widget.camera.thread.blockSignals(False)
 
     def openFile(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Movie",
