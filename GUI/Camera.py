@@ -18,6 +18,7 @@ class VideoThread(QThread):
     def __init__(self):
         super().__init__()
         self._run_flag = True
+        self.pause = True
 
     def run(self):
         # capture from web cam
@@ -25,11 +26,12 @@ class VideoThread(QThread):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         while self._run_flag:
-            ret, cv_img = cap.read()
-            cv_img = cv2.flip(cv_img, 1)
-            if ret:
-                """I don't know how powerful the hardware will be, so limiting eye mesh tracking"""
-                self.change_pixmap_signal.emit(cv_img)
+            if not self.pause:
+                ret, cv_img = cap.read()
+                cv_img = cv2.flip(cv_img, 1)
+                if ret:
+                    """I don't know how powerful the hardware will be, so limiting eye mesh tracking"""
+                    self.change_pixmap_signal.emit(cv_img)
         # shut down capture system
         cap.release()
 
@@ -45,6 +47,7 @@ class CameraWindow(QMainWindow):
     def __init__(self, parent=None):
         super(CameraWindow, self).__init__(parent)
         self.tick = None
+        self.eyeMesh = False
         self.display_width = QDesktopWidget().screenGeometry().width()
         self.display_height = QDesktopWidget().screenGeometry().height()
 
@@ -60,11 +63,17 @@ class CameraWindow(QMainWindow):
         self.EyeTrackButton = QPushButton("Enable Eye Tracking", self)
         self.EyeTrackButton.setGeometry(self.display_width, 0, 150, 40)
         self.EyeTrackButton.setCheckable(True)
-        self.EyeTrackButton.clicked.connect(self.toggleEyeMesh)
+        self.EyeTrackButton.clicked.connect(self.toggleEyeTrack)
         vbox.addWidget(self.EyeTrackButton)
 
+        self.ToggleEyeMeshButton = QPushButton("Enable Eye Mesh", self)
+        self.ToggleEyeMeshButton.setGeometry(self.display_width, 50, 150, 40)
+        self.ToggleEyeMeshButton.setCheckable(True)
+        self.ToggleEyeMeshButton.clicked.connect(self.toggleEyeMesh)
+        vbox.addWidget(self.ToggleEyeMeshButton)
+
         self.PoseButton = QPushButton("Enable Pose Detection", self)
-        self.PoseButton.setGeometry(self.display_width, 50, 150, 40)
+        self.PoseButton.setGeometry(self.display_width, 100, 150, 40)
         self.PoseButton.setCheckable(True)
         self.PoseButton.clicked.connect(self.togglePose)
         vbox.addWidget(self.PoseButton)
@@ -76,7 +85,7 @@ class CameraWindow(QMainWindow):
 
         self.combobox.currentTextChanged.connect(self.update_mesh_intervals)
         self.combobox.setCurrentIndex(4)
-        self.combobox.setGeometry(self.display_width, 100, 150, 40)
+        self.combobox.setGeometry(self.display_width, 150, 150, 40)
         vbox.addWidget(self.combobox)
 
         # create the video capture thread
@@ -105,8 +114,9 @@ class CameraWindow(QMainWindow):
 
     def resizeEvent(self, event):
         self.EyeTrackButton.move(self.width() - self.EyeTrackButton.width() - 2, 0)
-        self.PoseButton.move(self.width() - self.EyeTrackButton.width() - 2, 50)
-        self.combobox.move(self.width() - self.EyeTrackButton.width() - 2, 100)
+        self.PoseButton.move(self.width() - self.EyeTrackButton.width() - 2, 100)
+        self.ToggleEyeMeshButton.move(self.width() - self.EyeTrackButton.width() - 2, 50)
+        self.combobox.move(self.width() - self.EyeTrackButton.width() - 2, 150)
         self.display_width = self.width() - self.EyeTrackButton.width() - 17
         # self.display_height = self.height()
         # self.image_label.move(0,0)
@@ -116,19 +126,26 @@ class CameraWindow(QMainWindow):
         self.thread.stop()
         event.accept()
 
-    def toggleEyeMesh(self):
+    def toggleEyeTrack(self):
         if self.EyeTrackButton.isChecked():
-            self.EyeTrackButton.setStyleSheet("background-color : lightblue")
+            self.EyeTrackButton.setStyleSheet("background-color : lightgreen")
         else:
             self.EyeTrackButton.setStyleSheet("background-color : lightgrey")
 
         self.eyeTrackThread.enabled = not self.eyeTrackThread.enabled
 
-    def togglePose(self):
-        if self.EyeTrackButton.isChecked():
-            self.EyeTrackButton.setStyleSheet("background-color : lightblue")
+    def toggleEyeMesh(self):
+        if self.ToggleEyeMeshButton.isChecked():
+            self.ToggleEyeMeshButton.setStyleSheet("background-color : lightgreen")
         else:
-            self.EyeTrackButton.setStyleSheet("background-color : lightgrey")
+            self.ToggleEyeMeshButton.setStyleSheet("background-color : lightgrey")
+
+        self.eyeMesh = not self.eyeMesh
+    def togglePose(self):
+        if self.PoseButton.isChecked():
+            self.PoseButton.setStyleSheet("background-color : lightblue")
+        else:
+            self.PoseButton.setStyleSheet("background-color : lightgrey")
 
         self.thread.blockPose = not self.thread.blockPose
 
@@ -148,8 +165,9 @@ class CameraWindow(QMainWindow):
                 result = self.eyePos.center_calculations(self.eyeTrackThread.left_eye[0] + self.eyeTrackThread.right_eye[0],
                                                 self.eyeTrackThread.left_eye[1] + self.eyeTrackThread.right_eye[1])
 
-                cv2.circle(cv_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.circle(cv_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 0, 255), 2, cv2.LINE_AA)
+                if self.eyeMesh:
+                    cv2.circle(cv_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 0, 255), 2, cv2.LINE_AA)
+                    cv2.circle(cv_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 0, 255), 2, cv2.LINE_AA)
 
                 print(result)
                 #if self.tick:

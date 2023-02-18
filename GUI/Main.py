@@ -39,8 +39,10 @@ class App(QMainWindow):
     def onChange(self, i):  # changed!
         if i == 0:
             self.tab_widget.camera.blockSignals(True)
+            self.tab_widget.camera.videoThread.pause = True
         if i == 1:
             self.tab_widget.camera.blockSignals(False)
+            self.tab_widget.camera.videoThread.pause = False
             #self.tab_widget.camera.thread.blockSignals(False)
 
     def openFile(self):
