@@ -26,6 +26,7 @@ class VideoThread(QThread):
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         while self._run_flag:
             ret, cv_img = cap.read()
+            cv_img = cv2.flip(cv_img, 1)
             if ret:
                 """I don't know how powerful the hardware will be, so limiting eye mesh tracking"""
                 self.change_pixmap_signal.emit(cv_img)
@@ -43,6 +44,7 @@ class CameraWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(CameraWindow, self).__init__(parent)
+        self.tick = None
         self.display_width = QDesktopWidget().screenGeometry().width()
         self.display_height = QDesktopWidget().screenGeometry().height()
 
@@ -87,6 +89,11 @@ class CameraWindow(QMainWindow):
         self.eyeTrackThread = EyeMesh.EyeMesh()
         self.eyeTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
         self.eyeTrackThread.start()
+        
+        self.eyePos = EyeMesh.EyePosition()
+        #self.eyePos.correct_position.connect(self.add_tick)
+        #self.eyePos.start()
+        
         self.setLayout(vbox)
 
     def update_mesh_intervals(self, value):
@@ -115,7 +122,7 @@ class CameraWindow(QMainWindow):
         else:
             self.EyeTrackButton.setStyleSheet("background-color : lightgrey")
 
-        self.thread.blockMesh = not self.thread.blockMesh
+        self.eyeTrackThread.enabled = not self.eyeTrackThread.enabled
 
     def togglePose(self):
         if self.EyeTrackButton.isChecked():
@@ -128,17 +135,28 @@ class CameraWindow(QMainWindow):
     @pyqtSlot(np.ndarray)
     def update_image(self, cv_img):
         """Updates the image_label with a new opencv image"""
-        self.eyeTrackThread.frame_count += 1
 
-        if self.eyeTrackThread.frame_count >= 2:
-            self.videoThread.blockSignals(True)
-            self.eyeTrackThread.image = cv_img
-        # prevent race conditions
+        if self.eyeTrackThread.enabled:
+            self.eyeTrackThread.frame_count += 1
 
-        # load cached eyes
-        if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
-            cv2.circle(cv_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 0, 255), 2, cv2.LINE_AA)
-            cv2.circle(cv_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 0, 255), 2, cv2.LINE_AA)
+            if self.eyeTrackThread.frame_count >= 2:
+                self.videoThread.blockSignals(True)
+                self.eyeTrackThread.image = cv_img
+
+            # load cached eyes
+            if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
+                result = self.eyePos.center_calculations(self.eyeTrackThread.left_eye[0] + self.eyeTrackThread.right_eye[0],
+                                                self.eyeTrackThread.left_eye[1] + self.eyeTrackThread.right_eye[1])
+
+                cv2.circle(cv_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 0, 255), 2, cv2.LINE_AA)
+                cv2.circle(cv_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 0, 255), 2, cv2.LINE_AA)
+
+                print(result)
+                #if self.tick:
+                #    print("ok")
+                cv2.putText(img=cv_img, text='OK', org=(480 - 30, 640 - 30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3,
+                            color=(52, 235, 52), thickness=3)
+
 
         qt_img = self.convert_cv_qt(cv_img)
         self.image_label.setPixmap(qt_img)
@@ -147,6 +165,10 @@ class CameraWindow(QMainWindow):
     def unblock_signal(self):
         self.videoThread.blockSignals(False)
 
+    @pyqtSlot(int)
+    def add_tick(self):
+        self.tick = True
+        
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
         rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
