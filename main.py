@@ -1,24 +1,19 @@
 import math
 import sys
-import time
 
 import cv2
+import mediapipe as mp
 import numpy as np
 from PyQt5 import QtGui
 from PyQt5.QtCore import pyqtSlot, Qt
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow
 
 from GUI import Main
 from GUI import VideoPlayer
 from GUI.Camera import VideoThread
-
-import mediapipe as mp
-
 from Lib.EyeMesh import EyeMesh, EyePosition
-from Lib.PoseDetection import PoseDetection
-
-
+from Lib.PoseDetection import PoseDetection, PosePosition
 
 
 class MainWindow(QMainWindow):
@@ -69,6 +64,8 @@ class MainWindow(QMainWindow):
         self.poseTrackThread = PoseDetection()
         self.poseTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
         self.poseTrackThread.start()
+
+        self.posePos = PosePosition()
         self.poseMesh = False
 
         self.ui.pose_track_button.clicked.connect(self.togglePoseTrack)
@@ -138,7 +135,7 @@ class MainWindow(QMainWindow):
         minutes = math.floor((seconds - (hours * 3600)) / 60)
         secs = seconds - (hours * 3600) - (minutes * 60)
 
-        return minutes, seconds
+        return minutes, secs
 
     def video_duration(self, duration):
         self.ui.VideoSlider.setRange(0, duration)
@@ -159,10 +156,12 @@ class MainWindow(QMainWindow):
         """Updates the image_label with a new opencv image"""
         eye_img = None
         pose_img = None
+        result = False
 
         if self.eyeTrackThread.enabled:
             self.eyeTrackThread.frame_count += 1
             eye_img = cv_img.copy()
+            img_w, img_h = eye_img.shape[:2]
             if self.eyeTrackThread.frame_count >= 2:
                 self.videoThread.blockSignals(True)
                 self.eyeTrackThread.image = eye_img
@@ -180,12 +179,15 @@ class MainWindow(QMainWindow):
                                2,
                                cv2.LINE_AA)
 
-        #        print(result)
-        #        # if self.tick:
-        #        #    print("ok")
-        #        cv2.putText(img=cv_img, text='OK', org=(480 - 30, 640 - 30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-        #                    fontScale=3,
-        #                    color=(52, 235, 52), thickness=3)
+            if result:
+                cv2.line(eye_img, (315, 200), (300, 230), (52, 255, 52), 2)
+                cv2.line(eye_img, (300, 230), (295, 220), (52, 255, 52), 2)
+            else:
+                cv2.line(eye_img, (300, 200), (315, 230), (0, 0, 255), 2)
+                cv2.line(eye_img, (315, 200), (300, 230), (0, 0, 255), 2)
+                # cv2.imshow("derp", image)
+
+                # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
 
         # if pose detection is enabled
         if self.poseTrackThread.enabled:
@@ -197,8 +199,8 @@ class MainWindow(QMainWindow):
                 self.poseTrackThread.image = pose_img
 
             if self.poseTrackThread.results is not None:
+                results = self.posePos.calculate(self.poseTrackThread.results.pose_landmarks)
                 if self.poseMesh:
-                    print("drawing pose")
                     self.mp_drawing.draw_landmarks(image=pose_img,
                                                    landmark_list=self.poseTrackThread.results.pose_landmarks,
                                                    connections=mp.solutions.pose.POSE_CONNECTIONS,
@@ -208,6 +210,13 @@ class MainWindow(QMainWindow):
                                                    connection_drawing_spec=self.mp_drawing.DrawingSpec(
                                                        color=(49, 125, 237),
                                                        thickness=2, circle_radius=2))
+
+                if results:
+                    cv2.line(pose_img, (315, 200), (300, 230), (52, 255, 52), 2)
+                    cv2.line(pose_img, (300, 230), (295, 220), (52, 255, 52), 2)
+                else:
+                    cv2.line(pose_img, (300, 200), (315, 230), (0, 0, 255), 2)
+                    cv2.line(pose_img, (315, 200), (300, 230), (0, 0, 255), 2)
 
         if eye_img is not None:
             eye_img = self.convert_cv_qt(eye_img)
@@ -240,10 +249,6 @@ class MainWindow(QMainWindow):
         convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
         p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.IgnoreAspectRatio)
         return QPixmap.fromImage(p)
-
-    # def resizeEvent(self, event):
-    #    self.display_width = self.ui.lblCameraEye.width()
-    #    self.display_height = self.ui.lblCameraEye.height()
 
 
 if __name__ == '__main__':

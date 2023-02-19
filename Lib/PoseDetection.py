@@ -31,3 +31,19 @@ class PoseDetection(QThread):
                 self.toggle_pixmap_signal.emit(1)
 
 
+class PosePosition():
+    def __init__(self):
+        self.center_threshold = 75
+
+    def calculate(self, landmarks):
+        mesh_points = np.array(
+            [np.multiply([p.x, p.y], [320, 240]).astype(int) for p in landmarks.landmark])
+
+        mouth = (mesh_points[10] + mesh_points[9]) / 2
+        shoulders = (mesh_points[12] + mesh_points[11]) / 2
+
+        distance = shoulders[1] - mouth[1]
+
+        if distance >= 40:
+            return True
+

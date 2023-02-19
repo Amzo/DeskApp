@@ -75,7 +75,7 @@ class EyeMesh(QThread):
 
 class EyePosition():
     def __init__(self):
-        self.center_threshold = 20
+        self.center_threshold = 50
         self.center_position = [320, 240]
 
     def center_calculations(self, eye_left_right, eye_up_down):

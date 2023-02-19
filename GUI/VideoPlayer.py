@@ -17,6 +17,7 @@ class VideoWindow(QWidget):
         super(QWidget, self).__init__()
         self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
         self.mediaPlayer.setVideoOutput(widget)
+        self.mediaPlayer.stateChanged.connect(self.stateChanged)
         self.mediaPlayer.positionChanged.connect(self.positionChanged)
         self.mediaPlayer.durationChanged.connect(self.durationChanged)
         self.mediaPlayer.error.connect(self.handleError)
@@ -39,3 +40,8 @@ class VideoWindow(QWidget):
     def handleError(self):
         self.playButton.setEnabled(False)
         self.errorLabel.setText("Error: " + self.mediaPlayer.errorString())
+
+    # for repeating
+    def stateChanged(self):
+        if self.mediaPlayer.state() == 0:
+            self.mediaPlayer.play()
