@@ -23,7 +23,7 @@ class VideoWindow(QWidget):
         self.mediaPlayer.error.connect(self.handleError)
 
         self.mediaPlayer.setMedia(
-            QMediaContent(QUrl.fromLocalFile('C:\\Users\\Amzo\\Downloads\\file_example_MP4_1920_18MG.mp4')))
+            QMediaContent(QUrl.fromLocalFile('/home/amzo/University/DeskApp/video/test.mp4')))
         # self.playButton.setEnabled(True)
 
         # self.showMaximized()
@@ -38,8 +38,7 @@ class VideoWindow(QWidget):
         self.mediaPlayer.setPosition(position)
 
     def handleError(self):
-        self.playButton.setEnabled(False)
-        self.errorLabel.setText("Error: " + self.mediaPlayer.errorString())
+        print("Error: " + self.mediaPlayer.errorString())
 
     # for repeating
     def stateChanged(self):
