@@ -1,5 +1,7 @@
-import paho.mqtt.client as mqtt
+import socket
 
+import paho.mqtt.client as mqtt
+import time
 
 class ConnectPi:
     def __init__(self, ip, port):
@@ -13,8 +15,13 @@ class ConnectPi:
         self.connected = False
 
     def connect_to_pi(self):
-        self.client.connect(self.ip, self.port, keepalive=60, bind_address="")
-        self.client.loop_start()
+        try:
+            self.client.connect(self.ip, self.port, keepalive=60, bind_address="")
+            self.client.loop_start()
+        except socket.timeout:
+            print("Failed to connect retrying in 10 seconds")
+            time.sleep(10)
+            self.connect_to_pi()
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
