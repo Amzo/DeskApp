@@ -36,8 +36,12 @@ class PosePosition():
         self.center_threshold = 75
 
     def calculate(self, landmarks):
-        mesh_points = np.array(
-            [np.multiply([p.x, p.y], [320, 240]).astype(int) for p in landmarks.landmark])
+
+        if landmarks is not None:
+            mesh_points = np.array(
+                [np.multiply([p.x, p.y], [320, 240]).astype(int) for p in landmarks.landmark])
+        else:
+            return False
 
         mouth = (mesh_points[10] + mesh_points[9]) / 2
         shoulders = (mesh_points[12] + mesh_points[11]) / 2
@@ -46,4 +50,6 @@ class PosePosition():
 
         if distance >= 40:
             return True
+        else:
+            return False
 

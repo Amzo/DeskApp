@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from GUI import Main
 from GUI import VideoPlayer
 from GUI.Camera import VideoThread
+from Lib.Connection import ConnectPi
 from Lib.EyeMesh import EyeMesh, EyePosition
 from Lib.PoseDetection import PoseDetection, PosePosition
 
@@ -19,6 +20,11 @@ from Lib.PoseDetection import PoseDetection, PosePosition
 class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
+
+        # Connect here
+        self.connection = ConnectPi("192.168.50.63", 1883)
+        self.connection.connect_to_pi()
+
         self.ui = Main.Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -72,6 +78,7 @@ class MainWindow(QMainWindow):
         self.ui.pose_mesh_button.clicked.connect(self.togglePoseMesh)
 
     def toggleEyeTrack(self):
+        self.connection.send_message("red")
         if self.ui.eye_track_button.isChecked():
             self.ui.eye_track_button.setStyleSheet("background-color : lightgreen")
         else:
@@ -88,6 +95,7 @@ class MainWindow(QMainWindow):
         self.eyeMesh = not self.eyeMesh
 
     def togglePoseTrack(self):
+        self.connection.send_message("green")
         if self.ui.pose_track_button.isChecked():
             self.ui.pose_track_button.setStyleSheet("background-color : lightgreen")
         else:
