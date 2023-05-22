@@ -22,8 +22,8 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
 
         # Connect here
-        self.connection = ConnectPi("192.168.50.63", 1883)
-        self.connection.connect_to_pi()
+        self.connection = ConnectPi("10.42.0.1", 1883)
+        #self.connection.connect_to_pi()
 
         self.ui = Main.Ui_MainWindow()
         self.ui.setupUi(self)
@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
 
         # Camera stuff
         self.display_width = 640  # QDesktopWidget().screenGeometry().width()
-        self.display_height = 480  # QDesktopWidget().screenGeometry().height()
+        self.display_height = 360  # QDesktopWidget().screenGeometry().height()
 
         ### Tab widget ###
         self.ui.tabWidget.currentChanged.connect(self.onChange)
@@ -59,7 +59,10 @@ class MainWindow(QMainWindow):
 
         self.eyePos = EyePosition()
         self.eyeMesh = False
+        self.start_point = (270, 160)
+        self.end_point = (370, 200)
 
+        # 50 - 60, 60 - 70, 70- 80
         self.ui.eye_track_button.clicked.connect(self.toggleEyeTrack)
         self.ui.eye_mesh_button.clicked.connect(self.toggleEyeMesh)
         ####################
@@ -129,13 +132,28 @@ class MainWindow(QMainWindow):
         t_minutes, t_seconds = self.convert_seconds(round(self.ui.VideoSlider.maximum() / 1000))
 
         if seconds < 10:
+            timex = f"{minutes}0{seconds}"
             self.ui.durationLabel.setText(f'{minutes}:0{seconds} / {t_minutes}:{t_seconds}')
         else:
             self.ui.durationLabel.setText(f'{minutes}:{seconds} / {t_minutes}:{t_seconds}')
+            timex = f"{minutes}{seconds}"
 
         #########################################################################################################
         # Send command to pi from here
         #########################################################################################################
+
+        print(timex)
+        if timex == "053":
+            print("sending message")
+            self.connection.send_message("pink")
+        elif timex == "206":
+            print("Sending message")
+            self.connection.send_message("green")
+        elif timex == "225":
+            print("sending message")
+            self.connection.send_message("blue")
+        elif timex == "103" or timex == "220" or timex == "238":
+            self.connection.send_message("off")
 
     @staticmethod
     def convert_seconds(seconds):
@@ -159,6 +177,21 @@ class MainWindow(QMainWindow):
             # self.tab_widget.camera.videoThread.pause = False
             # self.tab_widget.camera.thread.blockSignals(False)
 
+    def drawRectangle(self, image):
+        img = cv2.rectangle(image, self.start_point, self.end_point, (0,0, 255), 1)
+        return img
+
+    def setNewBoundingBox(self, distance):
+        if 50 <= distance < 60:
+            self.start_point = (250, 140)
+            self.end_point = (390, 220)
+        elif 60 <= distance < 70:
+            self.start_point = (270, 160)
+            self.end_point = (370, 200)
+        elif 70 <= distance < 80:
+            self.start_point = (290, 160)
+            self.end_point = (350, 200)
+
     @pyqtSlot(np.ndarray)
     def update_image(self, cv_img):
         """Updates the image_label with a new opencv image"""
@@ -169,6 +202,18 @@ class MainWindow(QMainWindow):
         if self.eyeTrackThread.enabled:
             self.eyeTrackThread.frame_count += 1
             eye_img = cv_img.copy()
+
+            if self.eyeTrackThread.distance is not None:
+                self.setNewBoundingBox(math.ceil(self.eyeTrackThread.distance))
+                cv2.putText(eye_img,
+                            f'{math.ceil(self.eyeTrackThread.distance)} cm',
+                            (10,20),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (0, 255, 0),
+                            2,
+                            cv2.LINE_AA)
+
             img_w, img_h = eye_img.shape[:2]
             if self.eyeTrackThread.frame_count >= 2:
                 self.videoThread.blockSignals(True)
@@ -176,23 +221,40 @@ class MainWindow(QMainWindow):
 
             # load cached eyes
             if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
-                result = self.eyePos.center_calculations(
-                    self.eyeTrackThread.left_eye[0] + self.eyeTrackThread.right_eye[0],
-                    self.eyeTrackThread.left_eye[1] + self.eyeTrackThread.right_eye[1])
+                print(self.eyeTrackThread.left_eye)
+
+                if self.eyeTrackThread.left_eye[0] > self.start_point[0] and self.eyeTrackThread.left_eye[1] > self.start_point[1]:
+                    left_eye = True
+                else:
+                    left_eye = False
+
+                if self.eyeTrackThread.right_eye[0] <= self.end_point[0] and self.eyeTrackThread.right_eye[1] < self.end_point[1]:
+                    right_eye = True
+                else:
+                    right_eye = False
+
+                if right_eye and left_eye:
+                    result = True
+                else:
+                    result = False
 
                 if self.eyeMesh:
-                    cv2.circle(eye_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 0, 255), 2,
+                    eye_img = self.drawRectangle(eye_img)
+
+                    cv2.circle(eye_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 255, 0), 2,
                                cv2.LINE_AA)
-                    cv2.circle(eye_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 0, 255),
+                    cv2.circle(eye_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 255, 0),
                                2,
                                cv2.LINE_AA)
 
             if result:
-                cv2.line(eye_img, (315, 200), (300, 230), (52, 255, 52), 2)
-                cv2.line(eye_img, (300, 230), (295, 220), (52, 255, 52), 2)
+                cv2.line(eye_img, (630, 310), (610, 340), (52, 255, 52), 2)
+                cv2.line(eye_img, (610, 340), (600, 325), (52, 255, 52), 2)
+                # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
+                # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
             else:
-                cv2.line(eye_img, (300, 200), (315, 230), (0, 0, 255), 2)
-                cv2.line(eye_img, (315, 200), (300, 230), (0, 0, 255), 2)
+                cv2.line(eye_img, (630, 310), (610, 340), (0, 0, 255), 2)
+                cv2.line(eye_img, (610, 310), (630, 340), (0, 0, 255), 2)
                 # cv2.imshow("derp", image)
 
                 # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
@@ -220,11 +282,13 @@ class MainWindow(QMainWindow):
                                                        thickness=2, circle_radius=2))
 
                 if results:
-                    cv2.line(pose_img, (315, 200), (300, 230), (52, 255, 52), 2)
-                    cv2.line(pose_img, (300, 230), (295, 220), (52, 255, 52), 2)
+                    cv2.line(pose_img, (630, 310), (610, 340), (52, 255, 52), 2)
+                    cv2.line(pose_img, (610, 340), (600, 325), (52, 255, 52), 2)
+                    # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
+                    # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
                 else:
-                    cv2.line(pose_img, (300, 200), (315, 230), (0, 0, 255), 2)
-                    cv2.line(pose_img, (315, 200), (300, 230), (0, 0, 255), 2)
+                    cv2.line(pose_img, (630, 310), (610, 340), (0, 0, 255), 2)
+                    cv2.line(pose_img, (610, 310), (630, 340), (0, 0, 255), 2)
 
         if eye_img is not None:
             eye_img = self.convert_cv_qt(eye_img)

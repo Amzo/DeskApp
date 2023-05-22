@@ -14,6 +14,7 @@ class EyeMesh(QThread):
 
     def __init__(self):
         super().__init__()
+        self.distance = None
         self.how_many_frames = 2
         self.frame_count = 0
         self.left_eye = [0, 0]
@@ -23,12 +24,26 @@ class EyeMesh(QThread):
         self.r_radius = 0
         self.image = None
         self.enabled = False
+
+        self.KNOWN_DISTANCE = 58.42 #cm
+        self.KNOWN_WIDTH = 6.4 # cm
+
         # self.Positionthread = EyePosition(self)
         # self.Positionthread.start()
 
+    def get_eye_width_in_pixels(self, left_eye, right_eye):
+        return (right_eye - left_eye)
+
+    def get_focal_length(self):
+        return (54.5 * self.KNOWN_DISTANCE) / self.KNOWN_WIDTH
+
+    def distance_finder(self, eye_distance):
+        # off by approximately 2cm, so minus 2
+        self.distance =  ((self.KNOWN_WIDTH * self.get_focal_length()) / eye_distance) - 2
+
     def run(self):
-        LEFT_IRIS = [474, 475, 476, 477]
-        RIGHT_IRIS = [469, 470, 471, 472]
+        RIGHT_IRIS = [474, 475, 476, 477]
+        LEFT_IRIS = [469, 470, 471, 472]
 
         face_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=True,
                                                     max_num_faces=1,
@@ -36,7 +51,7 @@ class EyeMesh(QThread):
                                                     min_detection_confidence=0.6,
                                                     min_tracking_confidence=0.6)
         while True:
-            time.sleep(0.04)
+            time.sleep(0.1)
             if self.frame_count >= self.how_many_frames and self.image is not None:
                 results = face_mesh.process(self.image[:, :, ::-1])
 
@@ -55,6 +70,9 @@ class EyeMesh(QThread):
                     (r_cx, r_cy), self.r_radius = cv2.minEnclosingCircle(mesh_points[RIGHT_IRIS])
 
                     # turn center points into np array
+                    eye_width_pixels = self.get_eye_width_in_pixels(l_cx, r_cx)
+                    self.distance_finder(eye_width_pixels)
+
                     self.left_eye = np.array([l_cx, l_cy], dtype=np.int32)
                     self.right_eye = np.array([r_cx, r_cy], dtype=np.int32)
 
@@ -75,6 +93,7 @@ class EyeMesh(QThread):
 
 class EyePosition():
     def __init__(self):
+        eye_distance = 64
         self.center_threshold = 50
         self.center_position = [320, 240]
 
