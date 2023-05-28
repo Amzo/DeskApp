@@ -221,7 +221,6 @@ class MainWindow(QMainWindow):
 
             # load cached eyes
             if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
-                print(self.eyeTrackThread.left_eye)
 
                 if self.eyeTrackThread.left_eye[0] > self.start_point[0] and self.eyeTrackThread.left_eye[1] > self.start_point[1]:
                     left_eye = True
