@@ -15,19 +15,26 @@ class ConnectPi:
         self.connected = False
 
     def connect_to_pi(self):
+        count = 0
         try:
             self.client.connect(self.ip, self.port, keepalive=60, bind_address="")
             self.client.loop_start()
         except socket.timeout:
+            count += 1
             print("Failed to connect retrying in 10 seconds")
             time.sleep(10)
-            self.connect_to_pi()
+            if count > 3:
+                print("Giving up connection")
+                self.connected = False
+            else:
+                self.connect_to_pi()
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.connected = True
             print("Successfully Connected to the Raspberry Pi")
         else:
+            self.connected = False
             print(f"Connection failed: {rc}")
 
     def on_disconnect(self, client, userdata, rc):

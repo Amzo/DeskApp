@@ -7,7 +7,7 @@ import numpy as np
 from PyQt5 import QtGui
 from PyQt5.QtCore import pyqtSlot, Qt
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
 
 from GUI import Main
 from GUI import VideoPlayer
@@ -22,11 +22,13 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
 
         # Connect here
-        self.connection = ConnectPi("10.42.0.1", 1883)
-        #self.connection.connect_to_pi()
+        self.connected = False
 
         self.ui = Main.Ui_MainWindow()
         self.ui.setupUi(self)
+
+        self.ui.actionConnect.triggered.connect(self.connectToPi)
+        self.ui.actionCalibrate.triggered.connect(self.calibrate)
 
         self.mediaPlayer = VideoPlayer.VideoWindow(self.ui.VideoWidget)
         self.mediaPlayer.playback_slider_signal.connect(self.slider_update)
@@ -59,6 +61,8 @@ class MainWindow(QMainWindow):
 
         self.eyePos = EyePosition()
         self.eyeMesh = False
+
+        # default bounding box
         self.start_point = (270, 160)
         self.end_point = (370, 200)
 
@@ -80,8 +84,38 @@ class MainWindow(QMainWindow):
         self.ui.pose_track_button.clicked.connect(self.togglePoseTrack)
         self.ui.pose_mesh_button.clicked.connect(self.togglePoseMesh)
 
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+                                           "Are you sure to quit?", QMessageBox.Yes, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            self.videoThread.stop()
+            self.eyeTrackThread.stop()
+            event.accept()
+        else:
+            event.ignore()
+
+    def calibrate(self):
+        QMessageBox.about(self, "Calibration",
+                          "To Calibrate, sit in the upright position, and align eyes to the center of the screen "
+                          "until the green tick. "
+                          ""
+                          ""
+                          "Once ready click okay and maintain for 5 seconds")
+
+    def connectToPi(self):
+        print("Running connect to Pi")
+        self.connection = ConnectPi("10.42.0.1", 1883)
+        self.connection.connect_to_pi()
+        print("Connecting to Pi")
+
     def toggleEyeTrack(self):
-        self.connection.send_message("red")
+        try:
+            if self.connection.connected:
+                self.connection.send_message("red")
+        except AttributeError:
+            pass
+
         if self.ui.eye_track_button.isChecked():
             self.ui.eye_track_button.setStyleSheet("background-color : lightgreen")
         else:
@@ -98,7 +132,12 @@ class MainWindow(QMainWindow):
         self.eyeMesh = not self.eyeMesh
 
     def togglePoseTrack(self):
-        self.connection.send_message("green")
+        try:
+            if self.connection.connected:
+                self.connection.send_message("green")
+        except AttributeError:
+            pass
+
         if self.ui.pose_track_button.isChecked():
             self.ui.pose_track_button.setStyleSheet("background-color : lightgreen")
         else:
@@ -143,17 +182,18 @@ class MainWindow(QMainWindow):
         #########################################################################################################
 
         print(timex)
-        if timex == "053":
-            print("sending message")
-            self.connection.send_message("pink")
-        elif timex == "206":
-            print("Sending message")
-            self.connection.send_message("green")
-        elif timex == "225":
-            print("sending message")
-            self.connection.send_message("blue")
-        elif timex == "103" or timex == "220" or timex == "238":
-            self.connection.send_message("off")
+        if self.connection.connected:
+            if timex == "053":
+                print("sending message")
+                self.connection.send_message("pink")
+            elif timex == "206":
+                print("Sending message")
+                self.connection.send_message("green")
+            elif timex == "225":
+                print("sending message")
+                self.connection.send_message("blue")
+            elif timex == "103" or timex == "220" or timex == "238":
+                self.connection.send_message("off")
 
     @staticmethod
     def convert_seconds(seconds):
@@ -178,7 +218,7 @@ class MainWindow(QMainWindow):
             # self.tab_widget.camera.thread.blockSignals(False)
 
     def drawRectangle(self, image):
-        img = cv2.rectangle(image, self.start_point, self.end_point, (0,0, 255), 1)
+        img = cv2.rectangle(image, self.start_point, self.end_point, (0, 0, 255), 1)
         return img
 
     def setNewBoundingBox(self, distance):
@@ -207,7 +247,7 @@ class MainWindow(QMainWindow):
                 self.setNewBoundingBox(math.ceil(self.eyeTrackThread.distance))
                 cv2.putText(eye_img,
                             f'{math.ceil(self.eyeTrackThread.distance)} cm',
-                            (10,20),
+                            (10, 20),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.5,
                             (0, 255, 0),
@@ -222,12 +262,14 @@ class MainWindow(QMainWindow):
             # load cached eyes
             if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
 
-                if self.eyeTrackThread.left_eye[0] > self.start_point[0] and self.eyeTrackThread.left_eye[1] > self.start_point[1]:
+                if self.eyeTrackThread.left_eye[0] > self.start_point[0] and self.eyeTrackThread.left_eye[1] > \
+                        self.start_point[1]:
                     left_eye = True
                 else:
                     left_eye = False
 
-                if self.eyeTrackThread.right_eye[0] <= self.end_point[0] and self.eyeTrackThread.right_eye[1] < self.end_point[1]:
+                if self.eyeTrackThread.right_eye[0] <= self.end_point[0] and self.eyeTrackThread.right_eye[1] < \
+                        self.end_point[1]:
                     right_eye = True
                 else:
                     right_eye = False

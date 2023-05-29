@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1013</width>
-    <height>820</height>
+    <width>1389</width>
+    <height>854</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -173,7 +173,7 @@
            <string/>
           </property>
           <property name="pixmap">
-           <pixmap>../Images/correct.png</pixmap>
+           <pixmap>../../../.designer/Images/correct.png</pixmap>
           </property>
           <property name="scaledContents">
            <bool>true</bool>
@@ -201,7 +201,7 @@
            <string/>
           </property>
           <property name="pixmap">
-           <pixmap>../Images/incorrect.png</pixmap>
+           <pixmap>../../../.designer/Images/incorrect.png</pixmap>
           </property>
           <property name="scaledContents">
            <bool>true</bool>
@@ -263,7 +263,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1013</width>
+     <width>1389</width>
      <height>21</height>
     </rect>
    </property>
@@ -271,7 +271,8 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionSettings"/>
+    <addaction name="actionConnect"/>
+    <addaction name="actionCalibrate"/>
    </widget>
    <widget class="QMenu" name="menuAbout">
     <property name="title">
@@ -284,6 +285,16 @@
   <action name="actionSettings">
    <property name="text">
     <string>Settings</string>
+   </property>
+  </action>
+  <action name="actionConnect">
+   <property name="text">
+    <string>Connect</string>
+   </property>
+  </action>
+  <action name="actionCalibrate">
+   <property name="text">
+    <string>Calibrate</string>
    </property>
   </action>
  </widget>

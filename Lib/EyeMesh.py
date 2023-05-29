@@ -24,9 +24,11 @@ class EyeMesh(QThread):
         self.r_radius = 0
         self.image = None
         self.enabled = False
+        self.running = False
 
-        self.KNOWN_DISTANCE = 58.42 #cm
+        self.KNOWN_DISTANCE = 63 #cm
         self.KNOWN_WIDTH = 6.4 # cm
+        self.BASE_EYE_DISTANCE_PIXELS = 33 #cm
 
         # self.Positionthread = EyePosition(self)
         # self.Positionthread.start()
@@ -35,13 +37,14 @@ class EyeMesh(QThread):
         return (right_eye - left_eye)
 
     def get_focal_length(self):
-        return (54.5 * self.KNOWN_DISTANCE) / self.KNOWN_WIDTH
+        return (self.BASE_EYE_DISTANCE_PIXELS * self.KNOWN_DISTANCE) / self.KNOWN_WIDTH
 
     def distance_finder(self, eye_distance):
-        # off by approximately 2cm, so minus 2
-        self.distance =  ((self.KNOWN_WIDTH * self.get_focal_length()) / eye_distance) - 2
+        #print(eye_distance)
+        self.distance = ((self.KNOWN_WIDTH * self.get_focal_length()) / eye_distance)
 
     def run(self):
+        self.running = True
         RIGHT_IRIS = [474, 475, 476, 477]
         LEFT_IRIS = [469, 470, 471, 472]
 
@@ -50,7 +53,7 @@ class EyeMesh(QThread):
                                                     refine_landmarks=True,
                                                     min_detection_confidence=0.6,
                                                     min_tracking_confidence=0.6)
-        while True:
+        while self.running:
             time.sleep(0.1)
             if self.frame_count >= self.how_many_frames and self.image is not None:
                 results = face_mesh.process(self.image[:, :, ::-1])
@@ -58,6 +61,7 @@ class EyeMesh(QThread):
                 # getting width and height or frame
                 img_h, img_w = self.image.shape[:2]
 
+                print(img_h, img_w)
                 # center position based on webcam resolution, width and height divided by two
                 self.center_position = [img_w / 2, img_h / 2]
 
@@ -89,6 +93,10 @@ class EyeMesh(QThread):
                     self.image = None
                     self.frame_count = 0
                     self.toggle_pixmap_signal.emit(1)
+
+    def stop(self):
+        self.running = False
+        self.wait()
 
 
 class EyePosition():
