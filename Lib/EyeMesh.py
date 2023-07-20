@@ -26,9 +26,9 @@ class EyeMesh(QThread):
         self.enabled = False
         self.running = False
 
-        self.KNOWN_DISTANCE = 63 #cm
+        self.KNOWN_DISTANCE = 64 #cm
         self.KNOWN_WIDTH = 6.4 # cm
-        self.BASE_EYE_DISTANCE_PIXELS = 33 #cm
+        self.BASE_EYE_DISTANCE_PIXELS = 52 #cm
 
         # self.Positionthread = EyePosition(self)
         # self.Positionthread.start()
@@ -40,7 +40,7 @@ class EyeMesh(QThread):
         return (self.BASE_EYE_DISTANCE_PIXELS * self.KNOWN_DISTANCE) / self.KNOWN_WIDTH
 
     def distance_finder(self, eye_distance):
-        #print(eye_distance)
+#
         self.distance = ((self.KNOWN_WIDTH * self.get_focal_length()) / eye_distance)
 
     def run(self):
@@ -61,7 +61,6 @@ class EyeMesh(QThread):
                 # getting width and height or frame
                 img_h, img_w = self.image.shape[:2]
 
-                print(img_h, img_w)
                 # center position based on webcam resolution, width and height divided by two
                 self.center_position = [img_w / 2, img_h / 2]
 

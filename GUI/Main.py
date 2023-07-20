@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'C:\Users\Amzo\Documents\DeskApp\Templates\DeskApp.ui'
+# Form implementation generated from reading ui file 'C:\Users\Amzo\Documents\DeskApp\Templates\DeskApp1.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.9
 #
@@ -14,7 +14,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1389, 854)
+        MainWindow.resize(1328, 820)
         MainWindow.setDockNestingEnabled(True)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setEnabled(True)
@@ -56,9 +56,9 @@ class Ui_MainWindow(object):
         self.pauseButton = QtWidgets.QPushButton(self.tab)
         self.pauseButton.setObjectName("pauseButton")
         self.horizontalLayout_2.addWidget(self.pauseButton)
-        self.pushButton = QtWidgets.QPushButton(self.tab)
-        self.pushButton.setObjectName("pushButton")
-        self.horizontalLayout_2.addWidget(self.pushButton)
+        self.fullScreenBtn = QtWidgets.QPushButton(self.tab)
+        self.fullScreenBtn.setObjectName("fullScreenBtn")
+        self.horizontalLayout_2.addWidget(self.fullScreenBtn)
         self.gridLayout_2.addLayout(self.horizontalLayout_2, 2, 0, 1, 2)
         self.tabWidget.addTab(self.tab, "")
         self.tab_2 = QtWidgets.QWidget()
@@ -141,10 +141,18 @@ class Ui_MainWindow(object):
         self.gridLayout_3.addWidget(self.pose_mesh_button, 1, 1, 1, 1)
         self.gridLayout_4.addLayout(self.gridLayout_3, 2, 0, 1, 2)
         self.tabWidget.addTab(self.tab_2, "")
+        self.tab_3 = QtWidgets.QWidget()
+        self.tab_3.setObjectName("tab_3")
+        self.gridLayout_6 = QtWidgets.QGridLayout(self.tab_3)
+        self.gridLayout_6.setObjectName("gridLayout_6")
+        self.gridLayout_5 = QtWidgets.QGridLayout()
+        self.gridLayout_5.setObjectName("gridLayout_5")
+        self.gridLayout_6.addLayout(self.gridLayout_5, 0, 0, 1, 1)
+        self.tabWidget.addTab(self.tab_3, "")
         self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menuBar = QtWidgets.QMenuBar(MainWindow)
-        self.menuBar.setGeometry(QtCore.QRect(0, 0, 1389, 21))
+        self.menuBar.setGeometry(QtCore.QRect(0, 0, 1328, 21))
         self.menuBar.setObjectName("menuBar")
         self.menuFile = QtWidgets.QMenu(self.menuBar)
         self.menuFile.setObjectName("menuFile")
@@ -157,13 +165,19 @@ class Ui_MainWindow(object):
         self.actionConnect.setObjectName("actionConnect")
         self.actionCalibrate = QtWidgets.QAction(MainWindow)
         self.actionCalibrate.setObjectName("actionCalibrate")
+        self.actionQuit = QtWidgets.QAction(MainWindow)
+        self.actionQuit.setObjectName("actionQuit")
+        self.actionQuit_2 = QtWidgets.QAction(MainWindow)
+        self.actionQuit_2.setObjectName("actionQuit_2")
         self.menuFile.addAction(self.actionConnect)
         self.menuFile.addAction(self.actionCalibrate)
+        self.menuFile.addSeparator()
+        self.menuFile.addAction(self.actionQuit_2)
         self.menuBar.addAction(self.menuFile.menuAction())
         self.menuBar.addAction(self.menuAbout.menuAction())
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(1)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -172,16 +186,19 @@ class Ui_MainWindow(object):
         self.durationLabel.setText(_translate("MainWindow", "0:00/0:00"))
         self.playButton.setText(_translate("MainWindow", "Play"))
         self.pauseButton.setText(_translate("MainWindow", "Pause"))
-        self.pushButton.setText(_translate("MainWindow", "Restart"))
+        self.fullScreenBtn.setText(_translate("MainWindow", "Fullscreen"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Demo"))
         self.eye_track_button.setText(_translate("MainWindow", "Enable Eye Tracking"))
         self.pose_track_button.setText(_translate("MainWindow", "Enable Pose Tracking"))
         self.eye_mesh_button.setText(_translate("MainWindow", "Show Eye Mesh"))
         self.pose_mesh_button.setText(_translate("MainWindow", "Show Pose Mesh"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Tracking"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_3), _translate("MainWindow", "History"))
         self.menuFile.setTitle(_translate("MainWindow", "File"))
         self.menuAbout.setTitle(_translate("MainWindow", "Help"))
         self.actionSettings.setText(_translate("MainWindow", "Settings"))
         self.actionConnect.setText(_translate("MainWindow", "Connect"))
         self.actionCalibrate.setText(_translate("MainWindow", "Calibrate"))
+        self.actionQuit.setText(_translate("MainWindow", "Quit"))
+        self.actionQuit_2.setText(_translate("MainWindow", "Quit"))
 from PyQt5.QtMultimediaWidgets import QVideoWidget

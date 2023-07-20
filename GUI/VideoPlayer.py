@@ -23,10 +23,11 @@ class VideoWindow(QWidget):
         self.mediaPlayer.error.connect(self.handleError)
 
         self.mediaPlayer.setMedia(
-            QMediaContent(QUrl.fromLocalFile('video/test.mp4')))
+            QMediaContent(QUrl.fromLocalFile('video/Workstation.mp4')))
         # self.playButton.setEnabled(True)
 
         # self.showMaximized()
+
 
     def positionChanged(self, position):
         self.playback_slider_signal.emit(position)

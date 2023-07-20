@@ -1,5 +1,6 @@
 import math
 import sys
+import time
 
 import cv2
 import mediapipe as mp
@@ -14,6 +15,7 @@ from GUI import VideoPlayer
 from GUI.Camera import VideoThread
 from Lib.Connection import ConnectPi
 from Lib.EyeMesh import EyeMesh, EyePosition
+from Lib.Plotter import MplCanvas
 from Lib.PoseDetection import PoseDetection, PosePosition
 
 
@@ -22,7 +24,19 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
 
         # Connect here
+        self.sc = None
+        self.added = False
+        self.badPostureCount = 0
+        self.goodPostureCount = 0
+        self.GResults = []
+        self.BResults = []
+        self.minute = 0
+        self.distanceResults = 0
+        self.starttime = None
+        self.postureStartTime = time.time()
+        self.calibrationRunning = False
         self.connected = False
+        self.rightDistance = 64
 
         self.ui = Main.Ui_MainWindow()
         self.ui.setupUi(self)
@@ -36,6 +50,7 @@ class MainWindow(QMainWindow):
 
         self.ui.playButton.clicked.connect(self.play)
         self.ui.pauseButton.clicked.connect(self.pause)
+        self.ui.fullScreenBtn.clicked.connect(self.fullscreen)
 
         # Camera stuff
         self.display_width = 640  # QDesktopWidget().screenGeometry().width()
@@ -86,7 +101,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Message',
-                                           "Are you sure to quit?", QMessageBox.Yes, QMessageBox.No)
+                                     "Are you sure to quit?", QMessageBox.Yes, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             self.videoThread.stop()
@@ -96,12 +111,29 @@ class MainWindow(QMainWindow):
             event.ignore()
 
     def calibrate(self):
-        QMessageBox.about(self, "Calibration",
-                          "To Calibrate, sit in the upright position, and align eyes to the center of the screen "
-                          "until the green tick. "
+        calibrate = QMessageBox()
+        calibrate.setWindowTitle("Calibration")
+        calibrate.setText("To Calibrate, sit in the upright position, and align eyes to the center of the screen "
+                          "until the green tick appears. "
                           ""
                           ""
-                          "Once ready click okay and maintain for 5 seconds")
+                          "Once ready click Okay and maintain for 5 seconds")
+
+        calibrate.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        calibrate.buttonClicked.connect(self.calibrateClicked)
+
+        retval = calibrate.exec_()
+        # print("value of pressed message box button:", retval)
+
+    def calibrateClicked(self, i):
+        print(i.text())
+        if i.text() == "OK" and not self.calibrationRunning:
+            print("Running Calibration")
+            self.starttime = time.time()
+            self.distanceResults = []
+            self.calibrationRunning = True
+        elif self.calibrationRunning:
+            QMessageBox.about(self, "Error", "Calibration already running")
 
     def connectToPi(self):
         print("Running connect to Pi")
@@ -158,6 +190,10 @@ class MainWindow(QMainWindow):
         self.ui.pauseButton.setStyleSheet("background-color : lightgrey")
         self.mediaPlayer.mediaPlayer.play()
 
+    def fullscreen(self):
+        self.ui.VideoWidget.setFullScreen(True)
+        # self.mediaPlayer.showFullScreen()
+
     def pause(self):
         self.ui.pauseButton.setStyleSheet("background-color : lightblue")
         self.ui.playButton.setStyleSheet("background-color : lightgrey")
@@ -181,19 +217,24 @@ class MainWindow(QMainWindow):
         # Send command to pi from here
         #########################################################################################################
 
-        print(timex)
-        if self.connection.connected:
-            if timex == "053":
-                print("sending message")
-                self.connection.send_message("pink")
-            elif timex == "206":
-                print("Sending message")
-                self.connection.send_message("green")
-            elif timex == "225":
-                print("sending message")
-                self.connection.send_message("blue")
-            elif timex == "103" or timex == "220" or timex == "238":
-                self.connection.send_message("off")
+        # print(timex)
+        try:
+            if self.connection.connected:
+                if timex == "053":
+                    print("sending message")
+                    self.connection.send_message("pink")
+                elif timex == "208":
+                    print("Sending message")
+                    self.connection.send_message("green")
+                elif timex == "225":
+                    print("sending message")
+                    self.connection.send_message("blue")
+                elif timex == "258":
+                    self.connection.send_message("orange")
+                elif timex == "103" or timex == "221" or timex == "238" or timex == "312":
+                    self.connection.send_message("off")
+        except AttributeError:
+            pass
 
     @staticmethod
     def convert_seconds(seconds):
@@ -207,6 +248,7 @@ class MainWindow(QMainWindow):
         self.ui.VideoSlider.setRange(0, duration)
 
     def onChange(self, i):  # changed!
+        print(i)
         if i == 0:
             self.play()
             # self.tab_widget.camera.blockSignals(True)
@@ -216,6 +258,8 @@ class MainWindow(QMainWindow):
             # self.tab_widget.camera.blockSignals(False)
             # self.tab_widget.camera.videoThread.pause = False
             # self.tab_widget.camera.thread.blockSignals(False)
+        if i == 2:
+            self.drawPlot()
 
     def drawRectangle(self, image):
         img = cv2.rectangle(image, self.start_point, self.end_point, (0, 0, 255), 1)
@@ -288,7 +332,30 @@ class MainWindow(QMainWindow):
                                2,
                                cv2.LINE_AA)
 
+            if self.calibrationRunning and time.time() - self.starttime < 5:
+                cv2.putText(eye_img,
+                            f'{abs(math.ceil(self.starttime - time.time()) - 1)}',
+                            (300, 190),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            2,
+                            (0, 255, 0),
+                            8,
+                            cv2.LINE_AA)
+
+            if self.calibrationRunning and 6 < abs(math.ceil(self.starttime - time.time()) - 1) < 8:
+                cv2.putText(eye_img,
+                            f'Complete',
+                            (220, 190),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            2,
+                            (0, 255, 0),
+                            8,
+                            cv2.LINE_AA)
+
             if result:
+                if self.calibrationRunning and time.time() - self.starttime < 5:
+                    self.distanceResults.append(math.ceil(self.eyeTrackThread.distance))
+
                 cv2.line(eye_img, (630, 310), (610, 340), (52, 255, 52), 2)
                 cv2.line(eye_img, (610, 340), (600, 325), (52, 255, 52), 2)
                 # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
@@ -299,6 +366,9 @@ class MainWindow(QMainWindow):
                 # cv2.imshow("derp", image)
 
                 # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
+            if self.calibrationRunning and time.time() - self.starttime > 5:
+                self.calibrationRunning = False
+                self.rightDistance = sum(self.distanceResults) / len(self.distanceResults)
 
         # if pose detection is enabled
         if self.poseTrackThread.enabled:
@@ -322,14 +392,31 @@ class MainWindow(QMainWindow):
                                                        color=(49, 125, 237),
                                                        thickness=2, circle_radius=2))
 
-                if results:
-                    cv2.line(pose_img, (630, 310), (610, 340), (52, 255, 52), 2)
-                    cv2.line(pose_img, (610, 340), (600, 325), (52, 255, 52), 2)
-                    # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
-                    # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
-                else:
-                    cv2.line(pose_img, (630, 310), (610, 340), (0, 0, 255), 2)
-                    cv2.line(pose_img, (610, 310), (630, 340), (0, 0, 255), 2)
+                try:
+                    if (self.rightDistance - 4) < math.ceil(self.eyeTrackThread.distance) < (
+                            self.rightDistance + 4):  # or result
+                        self.goodPostureCount += 1
+                        cv2.line(pose_img, (630, 310), (610, 340), (52, 255, 52), 2)
+                        cv2.line(pose_img, (610, 340), (600, 325), (52, 255, 52), 2)
+                        # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
+                        # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
+                    else:
+                        self.badPostureCount += 1
+                        cv2.line(pose_img, (630, 310), (610, 340), (0, 0, 255), 2)
+                        cv2.line(pose_img, (610, 310), (630, 340), (0, 0, 255), 2)
+                except TypeError:
+                    pass
+
+                if time.time() - self.postureStartTime > 5:
+                    # save results every minute
+                    self.GResults.append({'time': self.minute, 'Good': self.goodPostureCount, 'Bad': self.badPostureCount})
+                    self.goodPostureCount = 0
+                    self.badPostureCount = 0
+                    self.minute += 1
+                    self.postureStartTime = time.time()
+                    self.drawPlot()
+                    print(self.GResults)
+                    print(self.BResults)
 
         if eye_img is not None:
             eye_img = self.convert_cv_qt(eye_img)
@@ -345,6 +432,28 @@ class MainWindow(QMainWindow):
         else:
             qt_img = self.convert_cv_qt(cv_img)
             self.ui.lblCameraPose.setPixmap(qt_img)
+
+    def drawPlot(self):
+        import pandas as pd
+
+        if not self.added:
+            self.sc = MplCanvas(self, width=5, height=4, dpi=100)
+
+        data = pd.DataFrame(self.GResults)
+
+        try:
+            data[['Good', 'Bad']].plot(ax=self.sc.axes, color="gr")
+
+        except KeyError:
+            pass
+
+        if not self.added:
+            self.ui.gridLayout_5.addWidget(self.sc)
+            self.added = True
+        else:
+            self.ui.gridLayout_5.removeWidget(self.sc)
+            self.added = False
+            self.drawPlot()
 
     @pyqtSlot(int)
     def unblock_signal(self):
