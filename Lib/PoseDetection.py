@@ -6,7 +6,8 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 
 class PoseDetection(QThread):
-    toggle_pixmap_signal = pyqtSignal(int)
+    process_image_signal = pyqtSignal()
+    image_signal = pyqtSignal(np.ndarray)
 
     def __init__(self):
         super().__init__()
@@ -18,17 +19,26 @@ class PoseDetection(QThread):
 
         self.pose_mesh = mp.solutions.pose.Pose(min_detection_confidence=0.6, min_tracking_confidence=0.6)
 
+        self.process_image_signal.connect(self.process_image)
+        self.image_signal.connect(self.update_image_and_process)
+
     def run(self):
-        while True:
-            time.sleep(0.04)
-            if self.frame_count >= self.how_many_frames and self.image is not None:
+        pass
 
-                self.results = self.pose_mesh.process(self.image[:, :, ::-1])
+    def process_image(self):
+        self.results = self.pose_mesh.process(self.image[:, :, ::-1])
 
-                self.frame_count = 0
-                self.toggle_pixmap_signal.emit(1)
-            else:
-                self.toggle_pixmap_signal.emit(1)
+        self.frame_count = 0
+
+    def update_image_and_process(self, eye_img):
+        self.image = eye_img
+        self.process_image_signal.emit()
+
+    def stop(self):
+        self.process_image_signal.disconnect(self.process_image)  # Disconnect the signal
+
+    def get_default_image(self):
+        return np.zeros((480, 640, 3), dtype=np.uint8)
 
 
 class PosePosition():
@@ -52,4 +62,3 @@ class PosePosition():
             return True
         else:
             return False
-

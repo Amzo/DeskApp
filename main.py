@@ -15,15 +15,24 @@ from GUI import VideoPlayer
 from GUI.Camera import VideoThread
 from Lib.Connection import ConnectPi
 from Lib.EyeMesh import EyeMesh, EyePosition
-from Lib.Plotter import MplCanvas
 from Lib.PoseDetection import PoseDetection, PosePosition
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
+        self.init_variables()
+        self.setup_ui()
+        self.setup_connections()
+        self.setup_camera_and_video()
+        self.setup_eye_tracking()
+        self.setup_pose_detection()
 
-        # Connect here
+    def init_variables(self):
+        self.connection = None
+        self.everyFrameParse = 2
+        self.setAttribute(Qt.WA_NativeWindow, True)
+
         self.sc = None
         self.added = False
         self.badPostureCount = 0
@@ -31,84 +40,108 @@ class MainWindow(QMainWindow):
         self.GResults = []
         self.BResults = []
         self.minute = 0
-        self.distanceResults = 0
+        self.distanceResults = []
         self.starttime = None
         self.postureStartTime = time.time()
         self.calibrationRunning = False
         self.connected = False
         self.rightDistance = 64
 
+        self.display_width = 640
+        self.display_height = 360
+
+        self.fullScreenMode = False
+        self.frame_count = 0
+        self.eyePos = EyePosition()
+        self.eyeMesh = True
+
+        self.posePos = PosePosition()
+        self.poseMesh = True
+
+    def setup_ui(self):
         self.ui = Main.Ui_MainWindow()
         self.ui.setupUi(self)
 
+    def setup_connections(self):
         self.ui.actionConnect.triggered.connect(self.connectToPi)
         self.ui.actionCalibrate.triggered.connect(self.calibrate)
+        self.ui.playButton.clicked.connect(self.play)
+        self.ui.pauseButton.clicked.connect(self.pause)
+        self.ui.fullScreenBtn.clicked.connect(self.fullscreen)
+        self.ui.tabWidget.currentChanged.connect(self.onChange)
 
+    def setup_camera_and_video(self):
         self.mediaPlayer = VideoPlayer.VideoWindow(self.ui.VideoWidget)
         self.mediaPlayer.playback_slider_signal.connect(self.slider_update)
         self.mediaPlayer.playback_duration_signal.connect(self.video_duration)
 
-        self.ui.playButton.clicked.connect(self.play)
-        self.ui.pauseButton.clicked.connect(self.pause)
-        self.ui.fullScreenBtn.clicked.connect(self.fullscreen)
-
-        # Camera stuff
-        self.display_width = 640  # QDesktopWidget().screenGeometry().width()
-        self.display_height = 360  # QDesktopWidget().screenGeometry().height()
-
-        ### Tab widget ###
-        self.ui.tabWidget.currentChanged.connect(self.onChange)
-        ##################
-
-        ### Video Thread ###
-        # create the video capture thread
         self.videoThread = VideoThread()
-        # connect its signal to the update_image slot
         self.videoThread.change_pixmap_signal.connect(self.update_image)
-        # start the thread
         self.videoThread.start()
-        #####################
 
-        ### Eye Tracking ###
+    def setup_eye_tracking(self):
         self.eyeTrackThread = EyeMesh()
-        self.eyeTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
         self.eyeTrackThread.start()
+        self.eyeTrackThread.enabled = True
 
-        self.eyePos = EyePosition()
-        self.eyeMesh = False
-
-        # default bounding box
-        self.start_point = (270, 160)
-        self.end_point = (370, 200)
-
-        # 50 - 60, 60 - 70, 70- 80
-        self.ui.eye_track_button.clicked.connect(self.toggleEyeTrack)
-        self.ui.eye_mesh_button.clicked.connect(self.toggleEyeMesh)
-        ####################
-
-        ### Pose Detection ###
+    def setup_pose_detection(self):
         self.mp_drawing = mp.solutions.drawing_utils
 
         self.poseTrackThread = PoseDetection()
-        self.poseTrackThread.toggle_pixmap_signal.connect(self.unblock_signal)
         self.poseTrackThread.start()
 
-        self.posePos = PosePosition()
-        self.poseMesh = False
+        self.poseTrackThread.enabled = True
 
-        self.ui.pose_track_button.clicked.connect(self.togglePoseTrack)
-        self.ui.pose_mesh_button.clicked.connect(self.togglePoseMesh)
+    def setTabVisibility(self, index, visible):
+        for i in range(self.ui.tabWidget.count()):
+            if i != index:
+                self.ui.tabWidget.tabBar().setTabVisible(i, visible)
+
+        if not visible:
+            self.ui.tabWidget.tabBar().hide()  # hide the tab bar when in full-screen mode
+        else:
+            self.ui.tabWidget.tabBar().show()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        modifiers = QApplication.keyboardModifiers()
+
+        if modifiers == (
+                Qt.ControlModifier | Qt.AltModifier) and (
+                key == Qt.Key_F and Qt.Key_P) and self.windowState() & Qt.WindowFullScreen:
+            self.fullScreenMode = False
+            # The secret key combination Ctrl+Alt+F is pressed
+            if self.windowState() & Qt.WindowFullScreen:  # if already in full screen
+                self.setWindowState(self.windowState() & ~Qt.WindowFullScreen)  # exit full screen
+                self.setTabVisibility(self.ui.tabWidget.indexOf(self.ui.tracking), True)
+                self.menuBar().show()
+        elif key == Qt.Key_F and self.ui.tabWidget.currentIndex() == self.ui.tabWidget.indexOf(self.ui.tracking):
+            # The key F is pressed when the 'tracking' tab is selected
+            if not (self.windowState() & Qt.WindowFullScreen):  # if not already in full screen
+                self.fullScreenMode = True
+                self.setWindowState(self.windowState() | Qt.WindowFullScreen)  # enter full screen
+                self.setTabVisibility(self.ui.tabWidget.indexOf(self.ui.tracking), False)
+                self.menuBar().hide()
+        elif key == Qt.Key_Escape and self.windowState() & Qt.WindowFullScreen:
+            # The Escape key is pressed when in full screen mode. Ignore it.
+            return
+        else:
+            # Any other key or key combination is pressed
+            super(MainWindow, self).keyPressEvent(event)
 
     def closeEvent(self, event):
-        reply = QMessageBox.question(self, 'Message',
-                                     "Are you sure to quit?", QMessageBox.Yes, QMessageBox.No)
+        if not self.fullScreenMode:  # If not in full screen mode
+            reply = QMessageBox.question(self, 'Message', "Are you sure to quit?", QMessageBox.Yes, QMessageBox.No)
 
-        if reply == QMessageBox.Yes:
-            self.videoThread.stop()
-            self.eyeTrackThread.stop()
-            event.accept()
-        else:
-            event.ignore()
+            if reply == QMessageBox.Yes:
+                self.videoThread.stop()
+                self.eyeTrackThread.stop()
+
+                event.accept()
+            else:
+                event.ignore()
+        else:  # If in full screen mode
+            event.ignore()  # Ignore the close event
 
     def calibrate(self):
         calibrate = QMessageBox()
@@ -126,7 +159,6 @@ class MainWindow(QMainWindow):
         # print("value of pressed message box button:", retval)
 
     def calibrateClicked(self, i):
-        print(i.text())
         if i.text() == "OK" and not self.calibrationRunning:
             print("Running Calibration")
             self.starttime = time.time()
@@ -142,47 +174,15 @@ class MainWindow(QMainWindow):
         print("Connecting to Pi")
 
     def toggleEyeTrack(self):
-        try:
-            if self.connection.connected:
-                self.connection.send_message("red")
-        except AttributeError:
-            pass
-
-        if self.ui.eye_track_button.isChecked():
-            self.ui.eye_track_button.setStyleSheet("background-color : lightgreen")
-        else:
-            self.ui.eye_track_button.setStyleSheet("background-color : lightgrey")
-
         self.eyeTrackThread.enabled = not self.eyeTrackThread.enabled
 
     def toggleEyeMesh(self):
-        if self.ui.eye_mesh_button.isChecked():
-            self.ui.eye_mesh_button.setStyleSheet("background-color : lightgreen")
-        else:
-            self.ui.eye_mesh_button.setStyleSheet("background-color : lightgrey")
-
         self.eyeMesh = not self.eyeMesh
 
     def togglePoseTrack(self):
-        try:
-            if self.connection.connected:
-                self.connection.send_message("green")
-        except AttributeError:
-            pass
-
-        if self.ui.pose_track_button.isChecked():
-            self.ui.pose_track_button.setStyleSheet("background-color : lightgreen")
-        else:
-            self.ui.pose_track_button.setStyleSheet("background-color : lightgrey")
-
         self.poseTrackThread.enabled = not self.poseTrackThread.enabled
 
     def togglePoseMesh(self):
-        if self.ui.pose_mesh_button.isChecked():
-            self.ui.pose_mesh_button.setStyleSheet("background-color : lightgreen")
-        else:
-            self.ui.pose_mesh_button.setStyleSheet("background-color : lightgrey")
-
         self.poseMesh = not self.poseMesh
 
     def play(self):
@@ -258,126 +258,73 @@ class MainWindow(QMainWindow):
             # self.tab_widget.camera.blockSignals(False)
             # self.tab_widget.camera.videoThread.pause = False
             # self.tab_widget.camera.thread.blockSignals(False)
-        if i == 2:
-            self.drawPlot()
-
-    def drawRectangle(self, image):
-        img = cv2.rectangle(image, self.start_point, self.end_point, (0, 0, 255), 1)
-        return img
-
-    def setNewBoundingBox(self, distance):
-        if 50 <= distance < 60:
-            self.start_point = (250, 140)
-            self.end_point = (390, 220)
-        elif 60 <= distance < 70:
-            self.start_point = (270, 160)
-            self.end_point = (370, 200)
-        elif 70 <= distance < 80:
-            self.start_point = (290, 160)
-            self.end_point = (350, 200)
 
     @pyqtSlot(np.ndarray)
     def update_image(self, cv_img):
         """Updates the image_label with a new opencv image"""
-        eye_img = None
+
         pose_img = None
-        result = False
 
-        if self.eyeTrackThread.enabled:
-            self.eyeTrackThread.frame_count += 1
-            eye_img = cv_img.copy()
+        self.frame_count += 1
 
-            if self.eyeTrackThread.distance is not None:
-                self.setNewBoundingBox(math.ceil(self.eyeTrackThread.distance))
-                cv2.putText(eye_img,
-                            f'{math.ceil(self.eyeTrackThread.distance)} cm',
-                            (10, 20),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.5,
-                            (0, 255, 0),
-                            2,
-                            cv2.LINE_AA)
+        if self.eyeTrackThread.distance is not None:
+            cv2.putText(cv_img,
+                        f'{math.ceil(self.eyeTrackThread.distance)} cm',
+                        (10, 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        2,
+                        cv2.LINE_AA)
 
-            img_w, img_h = eye_img.shape[:2]
-            if self.eyeTrackThread.frame_count >= 2:
-                self.videoThread.blockSignals(True)
-                self.eyeTrackThread.image = eye_img
+        if self.frame_count >= self.everyFrameParse:
+            self.eyeTrackThread.image_signal.emit(cv_img)
+            self.eyeTrackThread.perform_calculations()
 
-            # load cached eyes
-            if self.eyeTrackThread.left_eye[0] > 0 and self.eyeTrackThread.right_eye[0] > 0:
+        if self.calibrationRunning and time.time() - self.starttime < 5:
+            cv2.putText(self.eyeTrackThread.image,
+                        f'{abs(math.ceil(self.starttime - time.time()) - 1)}',
+                        (300, 190),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        2,
+                        (0, 255, 0),
+                        8,
+                        cv2.LINE_AA)
 
-                if self.eyeTrackThread.left_eye[0] > self.start_point[0] and self.eyeTrackThread.left_eye[1] > \
-                        self.start_point[1]:
-                    left_eye = True
-                else:
-                    left_eye = False
+        if self.calibrationRunning and 6 < abs(math.ceil(self.starttime - time.time()) - 1) < 8:
+            cv2.putText(self.eyeTrackThread.image,
+                        f'Complete',
+                        (220, 190),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        2,
+                        (0, 255, 0),
+                        8,
+                        cv2.LINE_AA)
 
-                if self.eyeTrackThread.right_eye[0] <= self.end_point[0] and self.eyeTrackThread.right_eye[1] < \
-                        self.end_point[1]:
-                    right_eye = True
-                else:
-                    right_eye = False
-
-                if right_eye and left_eye:
-                    result = True
-                else:
-                    result = False
-
-                if self.eyeMesh:
-                    eye_img = self.drawRectangle(eye_img)
-
-                    cv2.circle(eye_img, self.eyeTrackThread.left_eye, int(self.eyeTrackThread.l_radius), (0, 255, 0), 2,
-                               cv2.LINE_AA)
-                    cv2.circle(eye_img, self.eyeTrackThread.right_eye, int(self.eyeTrackThread.r_radius), (0, 255, 0),
-                               2,
-                               cv2.LINE_AA)
-
+        if self.eyeTrackThread.result:
             if self.calibrationRunning and time.time() - self.starttime < 5:
-                cv2.putText(eye_img,
-                            f'{abs(math.ceil(self.starttime - time.time()) - 1)}',
-                            (300, 190),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            2,
-                            (0, 255, 0),
-                            8,
-                            cv2.LINE_AA)
+                self.distanceResults.append(math.ceil(self.eyeTrackThread.distance))
 
-            if self.calibrationRunning and 6 < abs(math.ceil(self.starttime - time.time()) - 1) < 8:
-                cv2.putText(eye_img,
-                            f'Complete',
-                            (220, 190),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            2,
-                            (0, 255, 0),
-                            8,
-                            cv2.LINE_AA)
+            cv2.line(self.eyeTrackThread.image, (630, 310), (610, 340), (52, 255, 52), 2)
+            cv2.line(self.eyeTrackThread.image, (610, 340), (600, 325), (52, 255, 52), 2)
+            # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
+            # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
+        else:
+            cv2.line(self.eyeTrackThread.image, (630, 310), (610, 340), (0, 0, 255), 2)
+            cv2.line(self.eyeTrackThread.image, (610, 310), (630, 340), (0, 0, 255), 2)
+            # cv2.imshow("derp", image)
 
-            if result:
-                if self.calibrationRunning and time.time() - self.starttime < 5:
-                    self.distanceResults.append(math.ceil(self.eyeTrackThread.distance))
-
-                cv2.line(eye_img, (630, 310), (610, 340), (52, 255, 52), 2)
-                cv2.line(eye_img, (610, 340), (600, 325), (52, 255, 52), 2)
-                # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
-                # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
-            else:
-                cv2.line(eye_img, (630, 310), (610, 340), (0, 0, 255), 2)
-                cv2.line(eye_img, (610, 310), (630, 340), (0, 0, 255), 2)
-                # cv2.imshow("derp", image)
-
-                # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
-            if self.calibrationRunning and time.time() - self.starttime > 5:
-                self.calibrationRunning = False
-                self.rightDistance = sum(self.distanceResults) / len(self.distanceResults)
+            # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
+        if self.calibrationRunning and time.time() - self.starttime > 5:
+            self.calibrationRunning = False
+            self.rightDistance = sum(self.distanceResults) / len(self.distanceResults)
 
         # if pose detection is enabled
         if self.poseTrackThread.enabled:
-            self.poseTrackThread.frame_count += 1
             pose_img = cv_img.copy()
 
-            if self.poseTrackThread.frame_count >= 2:
-                self.videoThread.blockSignals(True)
-                self.poseTrackThread.image = pose_img
+            if self.frame_count >= self.everyFrameParse:
+                self.poseTrackThread.image_signal.emit(cv_img)
 
             if self.poseTrackThread.results is not None:
                 results = self.posePos.calculate(self.poseTrackThread.results.pose_landmarks)
@@ -398,8 +345,6 @@ class MainWindow(QMainWindow):
                         self.goodPostureCount += 1
                         cv2.line(pose_img, (630, 310), (610, 340), (52, 255, 52), 2)
                         cv2.line(pose_img, (610, 340), (600, 325), (52, 255, 52), 2)
-                        # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
-                        # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
                     else:
                         self.badPostureCount += 1
                         cv2.line(pose_img, (630, 310), (610, 340), (0, 0, 255), 2)
@@ -407,21 +352,9 @@ class MainWindow(QMainWindow):
                 except TypeError:
                     pass
 
-                if time.time() - self.postureStartTime > 5:
-                    # save results every minute
-                    self.GResults.append({'time': self.minute, 'Good': self.goodPostureCount, 'Bad': self.badPostureCount})
-                    self.goodPostureCount = 0
-                    self.badPostureCount = 0
-                    self.minute += 1
-                    self.postureStartTime = time.time()
-                    self.drawPlot()
-                    print(self.GResults)
-                    print(self.BResults)
-
-        if eye_img is not None:
-            eye_img = self.convert_cv_qt(eye_img)
+        if self.eyeTrackThread.image is not None:
+            eye_img = self.convert_cv_qt(self.eyeTrackThread.image)
             self.ui.lblCameraEye.setPixmap(eye_img)
-            eye_img = None
         else:
             qt_img = self.convert_cv_qt(cv_img)
             self.ui.lblCameraEye.setPixmap(qt_img)
@@ -433,35 +366,8 @@ class MainWindow(QMainWindow):
             qt_img = self.convert_cv_qt(cv_img)
             self.ui.lblCameraPose.setPixmap(qt_img)
 
-    def drawPlot(self):
-        import pandas as pd
-
-        if not self.added:
-            self.sc = MplCanvas(self, width=5, height=4, dpi=100)
-
-        data = pd.DataFrame(self.GResults)
-
-        try:
-            data[['Good', 'Bad']].plot(ax=self.sc.axes, color="gr")
-
-        except KeyError:
-            pass
-
-        if not self.added:
-            self.ui.gridLayout_5.addWidget(self.sc)
-            self.added = True
-        else:
-            self.ui.gridLayout_5.removeWidget(self.sc)
-            self.added = False
-            self.drawPlot()
-
-    @pyqtSlot(int)
-    def unblock_signal(self):
-        self.videoThread.blockSignals(False)
-
-    @pyqtSlot(int)
-    def add_tick(self):
-        self.tick = True
+        if self.frame_count >= self.everyFrameParse:
+            self.frame_count = 0
 
     def convert_cv_qt(self, cv_img):
         """Convert from an opencv image to QPixmap"""
