@@ -14,6 +14,7 @@ class EyeMesh(QThread):
 
     def __init__(self):
         super().__init__()
+        self.personDetected = False
         self.last_detection_time = None
         self.result = None
         self.distance = None
@@ -56,6 +57,7 @@ class EyeMesh(QThread):
             self.last_detection_time = None
             print("No one detected in 5 seconds")
             self.eyes_detected_signal.emit(False)
+            self.personDetected = False
 
     def process_image(self):
         RIGHT_IRIS = [474, 475, 476, 477]
@@ -66,6 +68,9 @@ class EyeMesh(QThread):
         results = self.face_mesh.process(self.image[:, :, ::-1])
 
         if results.multi_face_landmarks is not None:
+            if self.last_detection_time is None and not self.personDetected:
+                self.eyes_detected_signal.emit(True)
+                self.personDetected = True
             mesh_points = np.array(
                 [np.multiply([p.x, p.y], [self.image.shape[1], self.image.shape[0]]).astype(int) for p in
                  results.multi_face_landmarks[0].landmark])
@@ -80,9 +85,6 @@ class EyeMesh(QThread):
             self.right_eye = np.array([r_cx, r_cy], dtype=np.int32)
 
             self.last_detection_time = time.time()
-            self.eyes_detected_signal.emit(True)
-        else:
-            self.eyes_detected_signal.emit(False)
 
         self.frame_count = 0
 

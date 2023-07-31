@@ -80,7 +80,9 @@ class MainWindow(QMainWindow):
         self.videoThread.start()
 
     def setup_eye_tracking(self):
+        self.personPresent = False
         self.eyeTrackThread = EyeMesh()
+        self.eyeTrackThread.eyes_detected_signal.connect(self.update_eye_detection_status)  # Connect the signal to the slot
         self.eyeTrackThread.start()
         self.eyeTrackThread.enabled = True
 
@@ -143,6 +145,16 @@ class MainWindow(QMainWindow):
         else:  # If in full screen mode
             event.ignore()  # Ignore the close event
 
+    @pyqtSlot(bool)
+    def update_eye_detection_status(self, is_detected):
+        if is_detected and not self.personPresent:
+            self.personPresent = True
+            print("Eyes detected.")
+            self.calibrate()
+        else:
+            self.personPresent = False
+            print("Eyes not detected.")
+
     def calibrate(self):
         calibrate = QMessageBox()
         calibrate.setWindowTitle("Calibration")
@@ -155,8 +167,7 @@ class MainWindow(QMainWindow):
         calibrate.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         calibrate.buttonClicked.connect(self.calibrateClicked)
 
-        retval = calibrate.exec_()
-        # print("value of pressed message box button:", retval)
+        calibrate.exec_()
 
     def calibrateClicked(self, i):
         if i.text() == "OK" and not self.calibrationRunning:
@@ -259,9 +270,29 @@ class MainWindow(QMainWindow):
             # self.tab_widget.camera.videoThread.pause = False
             # self.tab_widget.camera.thread.blockSignals(False)
 
+    def draw_symbol(self, center, is_tick, color, thickness):
+        offset = 50  # adjust as needed for the size of the tick or cross
+        if is_tick:
+            # For a tick mark, we will draw two lines
+            # First line (starts from 2/3 down the left side of the cross, goes to the bottom center)
+            cv2.line(self.eyeTrackThread.image,
+                     (center[0] - offset // 2, center[1] - offset // 3),
+                     (center[0], center[1] + offset // 2), color, thickness)
+            # Second line (starts from the bottom center, goes to the top right corner)
+            cv2.line(self.eyeTrackThread.image,
+                     (center[0], center[1] + offset // 2),
+                     (center[0] + offset // 2, center[1] - offset // 2), color, thickness)
+        else:
+            cv2.line(self.eyeTrackThread.image, (center[0] - offset, center[1] - offset),
+                     (center[0] + offset, center[1] + offset), color, thickness)
+            cv2.line(self.eyeTrackThread.image, (center[0] + offset, center[1] - offset),
+                     (center[0] - offset, center[1] + offset), color, thickness)
+
     @pyqtSlot(np.ndarray)
     def update_image(self, cv_img):
         """Updates the image_label with a new opencv image"""
+        center_x = cv_img.shape[1] // 2
+        center_y = cv_img.shape[0] // 2
 
         pose_img = None
 
@@ -281,43 +312,52 @@ class MainWindow(QMainWindow):
             self.eyeTrackThread.image_signal.emit(cv_img)
             self.eyeTrackThread.perform_calculations()
 
-        if self.calibrationRunning and time.time() - self.starttime < 5:
-            cv2.putText(self.eyeTrackThread.image,
-                        f'{abs(math.ceil(self.starttime - time.time()) - 1)}',
-                        (300, 190),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        2,
-                        (0, 255, 0),
-                        8,
-                        cv2.LINE_AA)
 
-        if self.calibrationRunning and 6 < abs(math.ceil(self.starttime - time.time()) - 1) < 8:
+        if self.calibrationRunning:
+            elapsed_time = time.time() - self.starttime
+
+            if elapsed_time < 5:
+                text = f'{abs(math.ceil(5 - elapsed_time))}'
+            elif elapsed_time < 8:
+                text = 'Complete'
+            else:
+                self.calibrationRunning = False
+                self.rightDistance = sum(self.distanceResults) / len(self.distanceResults)
+                return
+
+            font_scale = 2
+            thickness = 8
+            font = cv2.FONT_HERSHEY_SIMPLEX
+
+            # Get the width and height of the text box
+            text_width, text_height = cv2.getTextSize(text, font, font_scale, thickness)[0]
+            x = (self.eyeTrackThread.image.shape[1] - text_width) // 2
+            y = (self.eyeTrackThread.image.shape[0] + text_height) // 2
+
+
+            # Draw the text on the image
             cv2.putText(self.eyeTrackThread.image,
-                        f'Complete',
-                        (220, 190),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        2,
+                        text,
+                        (x, y),
+                        font,
+                        font_scale,
                         (0, 255, 0),
-                        8,
+                        thickness,
                         cv2.LINE_AA)
 
         if self.eyeTrackThread.result:
-            if self.calibrationRunning and time.time() - self.starttime < 5:
+            if self.calibrationRunning and elapsed_time < 5:
                 self.distanceResults.append(math.ceil(self.eyeTrackThread.distance))
 
-            cv2.line(self.eyeTrackThread.image, (630, 310), (610, 340), (52, 255, 52), 2)
-            cv2.line(self.eyeTrackThread.image, (610, 340), (600, 325), (52, 255, 52), 2)
-            # cv2.line(eye_img, (600, 400), (585, 430), (52,255,52), 2)
-            # cv2.line(eye_img, (585, 430), (580, 420), (52,255,52), 2)
+            self.draw_symbol((center_x, center_y), True, (52, 255, 52), 2)
         else:
-            cv2.line(self.eyeTrackThread.image, (630, 310), (610, 340), (0, 0, 255), 2)
-            cv2.line(self.eyeTrackThread.image, (610, 310), (630, 340), (0, 0, 255), 2)
-            # cv2.imshow("derp", image)
+            self.draw_symbol((center_x, center_y), False, (0, 0, 255), 2)
 
-            # cv2.line(eye_img, (width, 0), (0, height), (0, 0, 255), 5)
-        if self.calibrationRunning and time.time() - self.starttime > 5:
+        if self.calibrationRunning and time.time() - self.starttime > 7:  # 5 seconds for calibration, 2 seconds for
+            # 'Complete' message
             self.calibrationRunning = False
             self.rightDistance = sum(self.distanceResults) / len(self.distanceResults)
+            print(self.rightDistance)
 
         # if pose detection is enabled
         if self.poseTrackThread.enabled:
