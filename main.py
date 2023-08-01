@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
 
     def init_variables(self):
         self.connection = None
-        self.everyFrameParse = 2
+        self.everyFrameParse = 3
         self.setAttribute(Qt.WA_NativeWindow, True)
 
         self.sc = None
